@@ -6,8 +6,8 @@
   "query": "粟裕 OR 陶勇 OR 批粟裕 OR 批判粟裕 OR 首长秘书 OR 军队批判材料 OR 文革军队 OR 军队 批判 OR 军委 批判",
   "source_filter": "",
   "date_filter": "",
-  "generated_at": "2026-05-16T10:07:50.630370+00:00",
-  "record_count": 0,
+  "generated_at": "2026-05-16T10:24:32.621991+00:00",
+  "record_count": 300,
   "purpose": "ChatGPT Project-readable archive pack generated from local BHA SQLite database.",
   "retrieval_note": "Chinese recall uses multi-query FTS plus LIKE fallback; citation evidence still comes from exported chunks."
 }
