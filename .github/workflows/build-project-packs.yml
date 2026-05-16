@@ -1,0 +1,89 @@
+name: Build ChatGPT Project Source Packs
+
+on:
+  workflow_dispatch:
+    inputs:
+      packs:
+        description: "Optional pack names separated by spaces. Leave empty to build all default packs."
+        required: false
+        default: ""
+      include_txt:
+        description: "Also sync and ingest upstream txt branch. This is slower and may be large."
+        required: true
+        type: boolean
+        default: false
+      commit_results:
+        description: "Commit generated project_sources back to the json branch."
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-project-packs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Sync upstream json branch
+        run: |
+          python scripts/sync_source.py --branch json --target data/raw
+
+      - name: Initialize database
+        run: |
+          python scripts/init_db.py --db db/bha.sqlite
+
+      - name: Ingest json branch
+        run: |
+          python scripts/ingest_json.py --input data/raw/json --db db/bha.sqlite
+
+      - name: Optionally sync and ingest txt branch
+        if: ${{ inputs.include_txt }}
+        run: |
+          python scripts/sync_source.py --branch txt --target data/raw
+          python scripts/ingest_text.py --input data/raw/txt --db db/bha.sqlite
+
+      - name: Export default Project packs
+        run: |
+          if [ -n "${{ inputs.packs }}" ]; then
+            python scripts/export_default_packs.py --db db/bha.sqlite --only ${{ inputs.packs }}
+          else
+            python scripts/export_default_packs.py --db db/bha.sqlite
+          fi
+
+      - name: Upload generated packs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bha-project-sources
+          path: project_sources/
+          if-no-files-found: error
+
+      - name: Commit generated packs
+        if: ${{ inputs.commit_results }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add project_sources
+          if git diff --cached --quiet; then
+            echo "No project_sources changes to commit."
+          else
+            git commit -m "Build BHA Project source packs"
+            git push origin json
+          fi
