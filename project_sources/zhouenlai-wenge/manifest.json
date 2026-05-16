@@ -1,0 +1,9 @@
+{
+  "pack_name": "zhouenlai-wenge",
+  "query": "周恩来 文化大革命 中央文革 国务院",
+  "source_filter": "",
+  "date_filter": "",
+  "generated_at": "2026-05-16T08:48:23.278116+00:00",
+  "record_count": 0,
+  "purpose": "ChatGPT Project-readable archive pack generated from local BHA SQLite database."
+}
