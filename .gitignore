@@ -1,0 +1,22 @@
+# Local raw data
+/data/raw/
+/data/tmp/
+
+# Generated databases
+/db/
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.env
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
