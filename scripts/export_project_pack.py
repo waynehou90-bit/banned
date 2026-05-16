@@ -6,6 +6,12 @@ text files but cannot execute a local SQLite database. The script queries the
 local BHA SQLite database and emits Markdown/JSON files under project_sources/.
 Commit the generated pack to GitHub, index the repository in ChatGPT Project,
 and the Project can retrieve the selected archive chunks as source files.
+
+Important retrieval note:
+SQLite FTS5 with the default unicode61 tokenizer is not reliable for Chinese
+word segmentation. For Chinese archive work, this exporter therefore supports
+multi-query recall and LIKE fallback. Use repeated --query flags or separate
+terms with OR / | / comma / Chinese comma / semicolon.
 """
 
 from __future__ import annotations
@@ -16,7 +22,7 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 
 def slugify(value: str) -> str:
@@ -39,7 +45,23 @@ def quote_fts_query(query: str) -> str:
     return f'"{escaped}"'
 
 
-def search(conn: sqlite3.Connection, query: str, limit: int, source: str = "", date: str = "") -> list[sqlite3.Row]:
+def split_query_terms(queries: Iterable[str]) -> list[str]:
+    terms: list[str] = []
+    for query in queries:
+        for item in re.split(r"\s+(?:OR|or)\s+|[|,，;；\n]+", query):
+            item = item.strip()
+            if item:
+                terms.append(item)
+    seen: set[str] = set()
+    result: list[str] = []
+    for term in terms:
+        if term not in seen:
+            seen.add(term)
+            result.append(term)
+    return result
+
+
+def search_fts(conn: sqlite3.Connection, query: str, limit: int, source: str = "", date: str = "") -> list[sqlite3.Row]:
     sql = """
     SELECT
         d.id AS document_id,
@@ -71,7 +93,7 @@ def search(conn: sqlite3.Connection, query: str, limit: int, source: str = "", d
             return rows
         return conn.execute(sql, (quote_fts_query(query), source, source, date, date, limit)).fetchall()
     except sqlite3.OperationalError:
-        return search_like(conn, query, limit, source, date)
+        return []
 
 
 def search_like(conn: sqlite3.Connection, query: str, limit: int, source: str = "", date: str = "") -> list[sqlite3.Row]:
@@ -89,19 +111,56 @@ def search_like(conn: sqlite3.Connection, query: str, limit: int, source: str = 
         c.char_start,
         c.char_end,
         c.text,
-        substr(c.text, 1, 260) AS snippet,
+        CASE
+            WHEN d.title LIKE '%' || ? || '%' THEN '[title] ' || d.title
+            WHEN d.author LIKE '%' || ? || '%' THEN '[author] ' || d.author
+            WHEN d.source LIKE '%' || ? || '%' THEN '[source] ' || d.source
+            ELSE substr(c.text, max(1, instr(c.text, ?) - 80), 260)
+        END AS snippet,
         0.0 AS rank
     FROM chunks c
     JOIN documents d ON d.id = c.document_id
     WHERE (c.text LIKE '%' || ? || '%'
         OR d.title LIKE '%' || ? || '%'
         OR d.author LIKE '%' || ? || '%'
-        OR d.source LIKE '%' || ? || '%')
+        OR d.source LIKE '%' || ? || '%'
+        OR d.tags LIKE '%' || ? || '%')
       AND (? = '' OR d.source LIKE '%' || ? || '%')
       AND (? = '' OR d.date LIKE '%' || ? || '%')
     LIMIT ?
     """
-    return conn.execute(sql, (query, query, query, query, source, source, date, date, limit)).fetchall()
+    return conn.execute(
+        sql,
+        (query, query, query, query, query, query, query, query, query, source, source, date, date, limit),
+    ).fetchall()
+
+
+def search_one_term(conn: sqlite3.Connection, term: str, limit: int, source: str = "", date: str = "") -> list[sqlite3.Row]:
+    rows = search_fts(conn, term, limit, source, date)
+    if rows:
+        return rows
+    return search_like(conn, term, limit, source, date)
+
+
+def search_many(conn: sqlite3.Connection, queries: list[str], limit: int, source: str = "", date: str = "") -> list[sqlite3.Row]:
+    terms = split_query_terms(queries)
+    if not terms:
+        return []
+
+    per_term_limit = max(limit, 50)
+    merged: dict[tuple[int, int], sqlite3.Row] = {}
+
+    for term in terms:
+        for row in search_one_term(conn, term, per_term_limit, source, date):
+            key = (row["document_id"], row["chunk_index"])
+            if key not in merged:
+                merged[key] = row
+            if len(merged) >= limit:
+                break
+        if len(merged) >= limit:
+            break
+
+    return list(merged.values())[:limit]
 
 
 def row_to_record(row: sqlite3.Row, pack_name: str) -> dict[str, Any]:
@@ -125,19 +184,22 @@ def row_to_record(row: sqlite3.Row, pack_name: str) -> dict[str, Any]:
     }
 
 
-def write_pack(out_dir: Path, pack_name: str, query: str, source: str, date: str, records: list[dict[str, Any]]) -> None:
+def write_pack(out_dir: Path, pack_name: str, queries: list[str], source: str, date: str, records: list[dict[str, Any]]) -> None:
     pack_dir = out_dir / pack_name
     pack_dir.mkdir(parents=True, exist_ok=True)
     generated_at = datetime.now(timezone.utc).isoformat()
+    query_display = " | ".join(queries)
 
     manifest = {
         "pack_name": pack_name,
-        "query": query,
+        "queries": queries,
+        "query": query_display,
         "source_filter": source,
         "date_filter": date,
         "generated_at": generated_at,
         "record_count": len(records),
         "purpose": "ChatGPT Project-readable archive pack generated from local BHA SQLite database.",
+        "retrieval_note": "Chinese recall uses multi-query FTS plus LIKE fallback; citation evidence still comes from exported chunks.",
     }
 
     (pack_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -147,7 +209,7 @@ def write_pack(out_dir: Path, pack_name: str, query: str, source: str, date: str
         "",
         "## 生成信息",
         "",
-        f"- 查询词：`{query}`",
+        f"- 查询词：`{query_display}`",
         f"- 来源过滤：`{source or '无'}`",
         f"- 日期过滤：`{date or '无'}`",
         f"- 生成时间：`{generated_at}`",
@@ -225,8 +287,13 @@ def write_pack(out_dir: Path, pack_name: str, query: str, source: str, date: str
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Export ChatGPT Project-readable archive pack from SQLite search results.")
     parser.add_argument("--db", default="db/bha.sqlite", help="SQLite database path.")
-    parser.add_argument("--query", required=True, help="Search query used to select archive chunks.")
-    parser.add_argument("--pack-name", default="", help="Pack folder name. Defaults to slugified query.")
+    parser.add_argument(
+        "--query",
+        required=True,
+        action="append",
+        help="Search query used to select archive chunks. Can be repeated. OR/|/comma separated terms are split for Chinese recall.",
+    )
+    parser.add_argument("--pack-name", default="", help="Pack folder name. Defaults to slugified first query.")
     parser.add_argument("--out", default="project_sources", help="Output root directory.")
     parser.add_argument("--limit", type=int, default=200, help="Maximum chunks to export.")
     parser.add_argument("--source", default="", help="Optional source filter.")
@@ -237,11 +304,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     db_path = Path(args.db)
-    pack_name = slugify(args.pack_name or args.query)
+    pack_name = slugify(args.pack_name or args.query[0])
     out_dir = Path(args.out)
 
     with connect(db_path) as conn:
-        rows = search(conn, args.query, args.limit, args.source, args.date)
+        rows = search_many(conn, args.query, args.limit, args.source, args.date)
 
     records = [row_to_record(row, pack_name) for row in rows]
     write_pack(out_dir, pack_name, args.query, args.source, args.date, records)
