@@ -1,10 +1,11 @@
 # Banned Historical Archives 本地数据库
 
-这个仓库用于把 `banned-historical-archives` 资料整理成可检索数据库。当前方案采用 **SQLite + FTS5 全文索引**，优先满足三件事：
+这个仓库用于把 `banned-historical-archives` 资料整理成可检索数据库。当前方案采用 **SQLite + FTS5 全文索引 + FastAPI 检索服务**，优先满足四件事：
 
 1. 本地可复现建库；
 2. 能按标题、作者、日期、来源、正文检索；
-3. 回答问题时可追溯到原始文件路径和来源链接。
+3. 回答问题时可追溯到原始文件路径和来源链接；
+4. 可通过 HTTP API 接入 GPT / RAG / MCP / Custom GPT Action。
 
 > 说明：本仓库不直接提交原始大文件和生成后的数据库文件。原始资料放在 `data/raw/`，生成数据库放在 `db/`，这些目录默认被 `.gitignore` 排除，避免仓库膨胀。
 
@@ -14,6 +15,12 @@
 .
 ├── README.md
 ├── requirements.txt
+├── openapi.yaml            # GPT Action / API schema
+├── Dockerfile
+├── docker-compose.yml
+├── app/
+│   ├── main.py             # FastAPI 服务入口
+│   └── retrieval.py        # SQLite FTS 检索层
 ├── schema/
 │   └── sqlite_schema.sql
 ├── scripts/
@@ -36,8 +43,6 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
-
-当前脚本只使用 Python 标准库，`requirements.txt` 暂时为空，保留给后续向量库、API 服务或分词器扩展。
 
 ### 2. 同步上游资料
 
@@ -81,13 +86,90 @@ python scripts/ingest_text.py --input data/raw/txt --db db/bha.sqlite
 
 也可以传入任意本地目录，只要里面有 `.json`、`.jsonl`、`.txt` 或 `.md` 文件。
 
-### 5. 检索
+### 5. 命令行检索
 
 ```bash
 python scripts/search.py --db db/bha.sqlite --query "文革 群众组织" --limit 10
 ```
 
 输出字段包括：标题、作者、日期、来源、文件路径、chunk 序号和命中文本片段。
+
+## 启动 API 服务
+
+本地启动：
+
+```bash
+export BHA_DB_PATH=db/bha.sqlite
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+检查服务：
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/stats
+```
+
+检索：
+
+```bash
+curl "http://localhost:8000/search?q=文革%20群众组织&limit=5"
+```
+
+POST 检索：
+
+```bash
+curl -X POST http://localhost:8000/search \
+  -H "Content-Type: application/json" \
+  -d '{"query":"文革 群众组织","limit":5}'
+```
+
+## Docker 启动
+
+先在本地生成数据库：
+
+```bash
+python scripts/init_db.py --db db/bha.sqlite
+python scripts/ingest_json.py --input data/raw/json --db db/bha.sqlite
+```
+
+再启动容器：
+
+```bash
+docker compose up --build
+```
+
+容器默认把本地 `./db` 只读挂载到 `/data`，并读取：
+
+```text
+BHA_DB_PATH=/data/bha.sqlite
+```
+
+## Custom GPT / Action 接入
+
+`openapi.yaml` 已提供基础 schema。若要接 Custom GPT Action，需要把 API 部署到可公开访问的 HTTPS 地址，然后把 `openapi.yaml` 里的：
+
+```yaml
+servers:
+  - url: http://localhost:8000
+```
+
+改成实际服务地址，例如：
+
+```yaml
+servers:
+  - url: https://your-domain.example.com
+```
+
+建议 GPT 的系统规则使用：
+
+```text
+你只能基于 /search 返回的检索结果回答 Banned Historical Archives 相关问题。
+回答必须列出 title、date、source、file_path、chunk_index。
+若结果不足，说明“当前检索结果不足以确认”，不得自行补全。
+对争议性历史问题，区分原文材料、报刊文章、个人讲话/批示、后人整理或评论。
+结论分为：可确认、可推断、待核实。
+```
 
 ## 数据库设计
 
@@ -128,5 +210,5 @@ GPT 只基于检索结果回答
 后续可以继续加三类能力：
 
 1. `Qdrant / FAISS` 向量索引，用于语义检索；
-2. `FastAPI` 服务，把检索接口暴露给 Custom GPT Action 或 MCP；
+2. MCP server，让 ChatGPT / Claude Desktop / Cursor 等客户端直接调用本地检索；
 3. 版本对比表，处理同一材料不同版本、不同校对状态之间的差异。
