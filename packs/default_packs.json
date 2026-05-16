@@ -1,72 +1,72 @@
 {
-  "description": "Default BHA archive packs for ChatGPT History Project indexing. Each pack is generated from the local SQLite/FTS5 database into project_sources/<pack_name>.",
+  "description": "Default BHA archive packs for ChatGPT History Project indexing. Each pack is generated from the local SQLite/FTS5 database into project_sources/<pack_name>. Queries may contain OR-separated narrow terms; exporter splits and merges results to improve Chinese recall.",
   "packs": [
     {
       "pack_name": "maozedong-pishi",
-      "query": "毛泽东 批示 指示 讲话",
+      "query": "毛泽东 OR 毛主席 OR 批示 OR 指示 OR 讲话",
       "limit": 300,
       "source": "",
       "date": ""
     },
     {
       "pack_name": "wenge-zhongyangwenjian",
-      "query": "文化大革命 中共中央 通知 决定 文件",
+      "query": "文化大革命 OR 中共中央 OR 通知 OR 决定 OR 中央文革 OR 文件",
       "limit": 300,
       "source": "",
       "date": "1966"
     },
     {
       "pack_name": "renminribao-1966-1976",
-      "query": "人民日报 文化大革命 革命委员会 批判",
+      "query": "文化大革命 OR 革命委员会 OR 批判 OR 造反派 OR 红卫兵",
       "limit": 300,
       "source": "人民日报",
       "date": ""
     },
     {
       "pack_name": "hongqi-zazhi",
-      "query": "红旗 杂志 文化大革命 阶级斗争 路线斗争",
+      "query": "文化大革命 OR 阶级斗争 OR 路线斗争 OR 批判 OR 继续革命",
       "limit": 300,
       "source": "红旗",
       "date": ""
     },
     {
       "pack_name": "zhouenlai-wenge",
-      "query": "周恩来 文化大革命 中央文革 国务院",
+      "query": "周恩来 OR 总理 OR 中央文革 OR 国务院 OR 文化大革命",
       "limit": 250,
       "source": "",
       "date": ""
     },
     {
       "pack_name": "suyu-taoyong",
-      "query": "粟裕 陶勇 批判 军队 文革",
-      "limit": 200,
+      "query": "粟裕 OR 陶勇 OR 批粟裕 OR 批判粟裕 OR 首长秘书 OR 军队批判材料 OR 文革军队 OR 军队 批判 OR 军委 批判",
+      "limit": 300,
       "source": "",
       "date": ""
     },
     {
       "pack_name": "qunzhongzuzhi-zaofanpai",
-      "query": "群众组织 造反派 红卫兵 革命委员会",
+      "query": "群众组织 OR 造反派 OR 红卫兵 OR 革命委员会 OR 群众专政",
       "limit": 300,
       "source": "",
       "date": ""
     },
     {
       "pack_name": "tequan-ganbu-zinv",
-      "query": "特权 干部 子女 走资派 官僚主义",
+      "query": "特权 OR 干部子女 OR 干部 子女 OR 走资派 OR 官僚主义 OR 资产阶级法权",
       "limit": 250,
       "source": "",
       "date": ""
     },
     {
       "pack_name": "linbiao-jiuyisan",
-      "query": "林彪 九一三 事件 批林批孔",
+      "query": "林彪 OR 九一三 OR 913事件 OR 批林批孔 OR 林彪反党集团",
       "limit": 250,
       "source": "",
       "date": ""
     },
     {
       "pack_name": "sirenbang-pipan",
-      "query": "四人帮 批判 江青 张春桥 姚文元 王洪文",
+      "query": "四人帮 OR 江青 OR 张春桥 OR 姚文元 OR 王洪文 OR 批判四人帮",
       "limit": 250,
       "source": "",
       "date": ""
