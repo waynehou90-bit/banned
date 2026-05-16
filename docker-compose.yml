@@ -1,0 +1,9 @@
+services:
+  bha-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      BHA_DB_PATH: /data/bha.sqlite
+    volumes:
+      - ./db:/data:ro
