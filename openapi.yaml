@@ -1,0 +1,156 @@
+openapi: 3.1.0
+info:
+  title: Banned Historical Archives Retrieval API
+  version: 0.1.0
+  description: Search a local SQLite FTS5 database built from Banned Historical Archives materials.
+servers:
+  - url: http://localhost:8000
+paths:
+  /health:
+    get:
+      operationId: health
+      summary: Check service health
+      responses:
+        '200':
+          description: Service status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+  /stats:
+    get:
+      operationId: stats
+      summary: Get database statistics
+      responses:
+        '200':
+          description: Database statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documents:
+                    type: integer
+                  chunks:
+                    type: integer
+                  sources:
+                    type: integer
+                  db_path:
+                    type: string
+  /search:
+    get:
+      operationId: searchArchives
+      summary: Search archive chunks
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Search query.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional source substring filter.
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional date substring filter.
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+    post:
+      operationId: searchArchivesPost
+      summary: Search archive chunks with JSON body
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+components:
+  schemas:
+    SearchRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 10
+        source:
+          type: string
+          default: ''
+        date:
+          type: string
+          default: ''
+    SearchResponse:
+      type: object
+      properties:
+        query:
+          type: string
+        limit:
+          type: integer
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              author:
+                type: string
+              date:
+                type: string
+              source:
+                type: string
+              tags:
+                type: string
+              url:
+                type: string
+              file_path:
+                type: string
+              chunk_index:
+                type: integer
+              char_start:
+                type: integer
+              char_end:
+                type: integer
+              snippet:
+                type: string
+              text:
+                type: string
+              rank:
+                type: number
