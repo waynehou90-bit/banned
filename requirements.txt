@@ -1,0 +1,6 @@
+# Current scripts use only the Python standard library.
+# Add optional RAG dependencies here later, for example:
+# fastapi
+# uvicorn
+# qdrant-client
+# sentence-transformers
